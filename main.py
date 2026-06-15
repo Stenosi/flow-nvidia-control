@@ -21,6 +21,7 @@ from typing import Optional
 import requests
 from pyflowlauncher import Plugin, Result, send_results
 from pyflowlauncher.result import JsonRPCResponse as ResultResponse
+from pyflowlauncher.api import open_url, open_uri, shell_run
 
 plugin = Plugin()
 
@@ -257,10 +258,7 @@ def _make_media_result(f: Path) -> Result:
         title=f.name,
         subtitle=f"{f.parent.name}  —  {mtime}",
         icon=ICON,
-        json_rpc_action={
-            "method": "open_url",
-            "parameters": [f.as_uri()],
-        },
+        json_rpc_action=open_uri(f.as_uri()),
     )
 
 
@@ -325,25 +323,19 @@ def handle_driver() -> list[Result]:
             icon=ICON,
         )]
 
-    action = {}
-    if info["download_url"]:
-        action = {"method": "open_url", "parameters": [info["download_url"]]}
-
+    dl_url = info["download_url"] or NVIDIA_DRIVERS_URL
     return [
         Result(
             title=f"Update available: {info['latest_version']}",
             subtitle=f"Installed: {info['installed_version']}  —  Click to download",
             icon=ICON,
-            json_rpc_action=action,
+            json_rpc_action=open_url(dl_url),
         ),
         Result(
             title="Open NVIDIA driver download page",
-            subtitle=info["download_url"] or NVIDIA_DRIVERS_URL,
+            subtitle=dl_url,
             icon=ICON,
-            json_rpc_action=action if action else {
-                "method": "open_url",
-                "parameters": [NVIDIA_DRIVERS_URL],
-            },
+            json_rpc_action=open_url(dl_url),
         ),
     ]
 
@@ -358,7 +350,7 @@ def handle_changelog() -> list[Result]:
         title="Open NVIDIA Release Notes",
         subtitle=url,
         icon=ICON,
-        json_rpc_action={"method": "open_url", "parameters": [url]},
+        json_rpc_action=open_url(url),
     )]
 
 
@@ -433,16 +425,13 @@ def handle_open() -> list[Result]:
             title="Open NVIDIA App",
             subtitle=str(exe),
             icon=ICON,
-            json_rpc_action={"method": "open_url", "parameters": [exe.as_uri()]},
+            json_rpc_action=shell_run(str(exe)),
         )]
     return [Result(
         title="NVIDIA App not found",
         subtitle="Download NVIDIA App from nvidia.com",
         icon=ICON,
-        json_rpc_action={
-            "method": "open_url",
-            "parameters": ["https://www.nvidia.com/en-us/software/nvidia-app/"],
-        },
+        json_rpc_action=open_url("https://www.nvidia.com/en-us/software/nvidia-app/"),
     )]
 
 
