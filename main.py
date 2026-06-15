@@ -1,5 +1,5 @@
 """
-Flow.Launcher.Plugin.NvidiaControl
+flow-nvidia-control
 Keyword: nv
 Subcommands: info | driver | changelog | stats | clips [game] | shots [game] | open
 """

@@ -33,7 +33,7 @@ jobs:
           $pluginName = "Flow.Launcher.Plugin.NvidiaControl"
           $zipName    = "$pluginName.zip"
 
-          # Raccoglie tutto escludendo cartelle di sviluppo
+          # Collect everything excluding dev-only folders
           $toExclude = @('.git', '.venv', '.github', '__pycache__', '.gitignore', '*.pyc')
           $items = Get-ChildItem -Path . | Where-Object {
             $name = $_.Name

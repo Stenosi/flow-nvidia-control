@@ -10,5 +10,5 @@
   "ExecuteFileName": "main.py",
   "IcoPath": "Images/icon.png",
   "MinimumAppVersion": "1.8.0",
-  "Website": "https://github.com/Stenosi/Flow.Launcher.Plugin.NvidiaControl"
+  "Website": "https://github.com/Stenosi/flow-nvidia-control"
 }

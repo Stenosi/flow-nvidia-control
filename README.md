@@ -1,7 +1,7 @@
 # Flow.Launcher.Plugin.NvidiaControl
 
-[![Build & Release](https://github.com/Stenosi/Flow.Launcher.Plugin.NvidiaControl/actions/workflows/release.yml/badge.svg)](https://github.com/Stenosi/Flow.Launcher.Plugin.NvidiaControl/actions/workflows/release.yml)
-[![GitHub release](https://img.shields.io/github/v/release/Stenosi/Flow.Launcher.Plugin.NvidiaControl)](https://github.com/Stenosi/Flow.Launcher.Plugin.NvidiaControl/releases/latest)
+[![Build & Release](https://github.com/Stenosi/flow-nvidia-control/actions/workflows/release.yml/badge.svg)](https://github.com/Stenosi/flow-nvidia-control/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/Stenosi/flow-nvidia-control)](https://github.com/Stenosi/flow-nvidia-control/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A [Flow Launcher](https://www.flowlauncher.com/) plugin to control your NVIDIA GPU without leaving the keyboard.
@@ -32,7 +32,7 @@ Open Flow Launcher → Settings → Plugin Store → search **NvidiaControl** �
 
 ### Manual
 
-1. Download `Flow.Launcher.Plugin.NvidiaControl.zip` from the [latest release](https://github.com/Stenosi/Flow.Launcher.Plugin.NvidiaControl/releases/latest).
+1. Download `Flow.Launcher.Plugin.NvidiaControl.zip` from the [latest release](https://github.com/Stenosi/flow-nvidia-control/releases/latest).
 2. Extract into `%APPDATA%\FlowLauncher\Plugins\NvidiaControl-73bb4ffd-4f56-461b-99ca-d9ddee0a61dc\`.
 3. Restart Flow Launcher.
 
@@ -67,8 +67,8 @@ If NVIDIA App uses a custom save location, update `CLIPS_DIR` and `SHOTS_DIR` at
 ## Development
 
 ```powershell
-git clone https://github.com/Stenosi/Flow.Launcher.Plugin.NvidiaControl
-cd Flow.Launcher.Plugin.NvidiaControl
+git clone https://github.com/Stenosi/flow-nvidia-control
+cd flow-nvidia-control
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
