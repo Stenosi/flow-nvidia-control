@@ -255,7 +255,7 @@ def _make_media_result(f: Path) -> Result:
     mtime = time.strftime("%d/%m/%Y %H:%M", time.localtime(f.stat().st_mtime))
     return Result(
         title=f.name,
-        Subtitle=f"{f.parent.name}  —  {mtime}",
+        subtitle=f"{f.parent.name}  —  {mtime}",
         icon=ICON,
         json_rpc_action={
             "method": "open_url",
@@ -272,27 +272,27 @@ def handle_info() -> list[Result]:
     try:
         gpu = get_gpu_info_wmi()
     except RuntimeError as e:
-        return [Result(title="NVIDIA GPU not detected", Subtitle=str(e), icon=ICON)]
+        return [Result(title="NVIDIA GPU not detected", subtitle=str(e), icon=ICON)]
     except Exception as e:
-        return [Result(title="WMI error", Subtitle=str(e), icon=ICON)]
+        return [Result(title="WMI error", subtitle=str(e), icon=ICON)]
 
     vram_str = f"{gpu['vram_mb']} MB" if gpu["vram_mb"] > 0 else "N/A (> 4 GB or unreadable)"
     return [
         Result(
             title=gpu["name"],
-            Subtitle="GPU name",
+            subtitle="GPU name",
             icon=ICON,
             copy_text=gpu["name"],
         ),
         Result(
             title=f"Driver {gpu['driver_version']}",
-            Subtitle="Installed driver version  —  Click to copy",
+            subtitle="Installed driver version  —  Click to copy",
             icon=ICON,
             copy_text=gpu["driver_version"],
         ),
         Result(
             title=f"VRAM: {vram_str}",
-            Subtitle="Total video memory",
+            subtitle="Total video memory",
             icon=ICON,
         ),
     ]
@@ -304,24 +304,24 @@ def handle_driver() -> list[Result]:
     except requests.Timeout:
         return [Result(
             title="NVIDIA server timeout",
-            Subtitle=f"No response within {HTTP_TIMEOUT}s. Try again later.",
+            subtitle=f"No response within {HTTP_TIMEOUT}s. Try again later.",
             icon=ICON,
         )]
     except requests.ConnectionError:
         return [Result(
             title="No Internet connection",
-            Subtitle="Check your network and try again",
+            subtitle="Check your network and try again",
             icon=ICON,
         )]
     except RuntimeError as e:
-        return [Result(title="Driver check error", Subtitle=str(e), icon=ICON)]
+        return [Result(title="Driver check error", subtitle=str(e), icon=ICON)]
     except Exception as e:
-        return [Result(title="Unexpected error", Subtitle=str(e), icon=ICON)]
+        return [Result(title="Unexpected error", subtitle=str(e), icon=ICON)]
 
     if info["is_up_to_date"]:
         return [Result(
             title=f"Driver up to date ({info['installed_version']})",
-            Subtitle="You are running the latest available driver",
+            subtitle="You are running the latest available driver",
             icon=ICON,
         )]
 
@@ -332,13 +332,13 @@ def handle_driver() -> list[Result]:
     return [
         Result(
             title=f"Update available: {info['latest_version']}",
-            Subtitle=f"Installed: {info['installed_version']}  —  Click to download",
+            subtitle=f"Installed: {info['installed_version']}  —  Click to download",
             icon=ICON,
             json_rpc_action=action,
         ),
         Result(
             title="Open NVIDIA driver download page",
-            Subtitle=info["download_url"] or NVIDIA_DRIVERS_URL,
+            subtitle=info["download_url"] or NVIDIA_DRIVERS_URL,
             icon=ICON,
             json_rpc_action=action if action else {
                 "method": "open_url",
@@ -356,7 +356,7 @@ def handle_changelog() -> list[Result]:
 
     return [Result(
         title="Open NVIDIA Release Notes",
-        Subtitle=url,
+        subtitle=url,
         icon=ICON,
         json_rpc_action={"method": "open_url", "parameters": [url]},
     )]
@@ -366,32 +366,32 @@ def handle_stats() -> list[Result]:
     if not _NVML_AVAILABLE:
         return [Result(
             title="pynvml not installed",
-            Subtitle="In the plugin folder run: pip install nvidia-ml-py",
+            subtitle="In the plugin folder run: pip install nvidia-ml-py",
             icon=ICON,
         )]
 
     try:
         s = get_gpu_stats_nvml()
     except _pynvml.NVMLError as e:
-        return [Result(title="pynvml error", Subtitle=str(e), icon=ICON)]
+        return [Result(title="pynvml error", subtitle=str(e), icon=ICON)]
     except Exception as e:
-        return [Result(title="GPU stats error", Subtitle=str(e), icon=ICON)]
+        return [Result(title="GPU stats error", subtitle=str(e), icon=ICON)]
 
     vram_pct = (s["vram_used_mb"] * 100 // s["vram_total_mb"]) if s["vram_total_mb"] else 0
     return [
         Result(
             title=f"GPU: {s['utilization']}%",
-            Subtitle="Graphics processor utilization",
+            subtitle="Graphics processor utilization",
             icon=ICON,
         ),
         Result(
             title=f"VRAM: {s['vram_used_mb']} / {s['vram_total_mb']} MB  ({vram_pct}%)",
-            Subtitle="Video memory in use",
+            subtitle="Video memory in use",
             icon=ICON,
         ),
         Result(
             title=f"Temperature: {s['temperature']}°C",
-            Subtitle="GPU core temperature",
+            subtitle="GPU core temperature",
             icon=ICON,
         ),
     ]
@@ -403,7 +403,7 @@ def handle_clips(game_filter: Optional[str]) -> list[Result]:
         suffix = f" for '{game_filter}'" if game_filter else ""
         return [Result(
             title=f"No clips found{suffix}",
-            Subtitle=str(CLIPS_DIR),
+            subtitle=str(CLIPS_DIR),
             icon=ICON,
         )]
     return [_make_media_result(f) for f in files]
@@ -420,7 +420,7 @@ def handle_shots(game_filter: Optional[str]) -> list[Result]:
         suffix = f" for '{game_filter}'" if game_filter else ""
         return [Result(
             title=f"No screenshots found{suffix}",
-            Subtitle=str(shots_dir),
+            subtitle=str(shots_dir),
             icon=ICON,
         )]
     return [_make_media_result(f) for f in files]
@@ -431,13 +431,13 @@ def handle_open() -> list[Result]:
     if exe:
         return [Result(
             title="Open NVIDIA App",
-            Subtitle=str(exe),
+            subtitle=str(exe),
             icon=ICON,
             json_rpc_action={"method": "open_url", "parameters": [exe.as_uri()]},
         )]
     return [Result(
         title="NVIDIA App not found",
-        Subtitle="Download NVIDIA App from nvidia.com",
+        subtitle="Download NVIDIA App from nvidia.com",
         icon=ICON,
         json_rpc_action={
             "method": "open_url",
@@ -457,7 +457,7 @@ def _help_results(partial: str) -> list[Result]:
         ("open",      "Launch NVIDIA App"),
     ]
     return [
-        Result(title=f"nv {cmd}", Subtitle=desc, icon=ICON)
+        Result(title=f"nv {cmd}", subtitle=desc, icon=ICON)
         for cmd, desc in commands
         if not partial or cmd.startswith(partial)
     ]
