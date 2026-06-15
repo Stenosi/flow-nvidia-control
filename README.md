@@ -16,7 +16,6 @@ A [Flow Launcher](https://www.flowlauncher.com/) plugin to control your NVIDIA G
 | `nv stats` | Live GPU utilization %, VRAM usage, core temperature |
 | `nv clips [game]` | List recent NVIDIA recordings, filterable by game name |
 | `nv shots [game]` | List recent NVIDIA screenshots, filterable by game name |
-| `nv open` | Launch NVIDIA App |
 
 ## Requirements
 
@@ -50,7 +49,6 @@ nv clips        → list all recent NVIDIA recordings
 nv clips fortnite → list clips from Fortnite sessions (fuzzy match)
 nv shots        → list all recent screenshots
 nv shots cyberpunk → list Cyberpunk 2077 screenshots (fuzzy match)
-nv open         → launch NVIDIA App
 ```
 
 ## Configuration

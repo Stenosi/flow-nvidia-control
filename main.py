@@ -1,7 +1,7 @@
 """
 flow-nvidia-control
 Keyword: nv
-Subcommands: info | driver | changelog | stats | clips [game] | shots [game] | open
+Subcommands: info | driver | changelog | stats | clips [game] | shots [game]
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Optional
 import requests
 from pyflowlauncher import Plugin, Result, send_results
 from pyflowlauncher.result import JsonRPCResponse as ResultResponse
-from pyflowlauncher.api import open_url, open_uri, shell_run
+from pyflowlauncher.api import open_url, open_uri
 
 plugin = Plugin()
 
@@ -30,11 +30,6 @@ plugin = Plugin()
 # ---------------------------------------------------------------------------
 
 ICON = "Images/icon.png"
-NVIDIA_APP_PATHS = [
-    Path(r"C:\Program Files\NVIDIA Corporation\NVIDIA app\CEF\NVIDIA app.exe"),
-    Path(r"C:\Program Files\NVIDIA Corporation\NVIDIA Control Panel\nvcplui.exe"),
-    Path(r"C:\Windows\System32\nvcplui.exe"),
-]
 CLIPS_DIR = Path.home() / "Videos" / "NVIDIA App"
 SHOTS_DIR = Path.home() / "Pictures" / "NVIDIA App"
 GPU_DATA_URL = "https://raw.githubusercontent.com/ZenitH-AT/nvidia-data/main/desktop-gpu.json"
@@ -418,23 +413,6 @@ def handle_shots(game_filter: Optional[str]) -> list[Result]:
     return [_make_media_result(f) for f in files]
 
 
-def handle_open() -> list[Result]:
-    exe = next((p for p in NVIDIA_APP_PATHS if p.exists()), None)
-    if exe:
-        return [Result(
-            title="Open NVIDIA App",
-            subtitle=str(exe),
-            icon=ICON,
-            json_rpc_action=shell_run(str(exe)),
-        )]
-    return [Result(
-        title="NVIDIA App not found",
-        subtitle="Download NVIDIA App from nvidia.com",
-        icon=ICON,
-        json_rpc_action=open_url("https://www.nvidia.com/en-us/software/nvidia-app/"),
-    )]
-
-
 def _help_results(partial: str) -> list[Result]:
     commands = [
         ("info",      "GPU name, installed driver version, total VRAM"),
@@ -443,7 +421,6 @@ def _help_results(partial: str) -> list[Result]:
         ("stats",     "Live GPU utilization %, VRAM usage, temperature"),
         ("clips",     "List recent video clips  (e.g. nv clips fortnite)"),
         ("shots",     "List recent screenshots  (e.g. nv shots cyberpunk)"),
-        ("open",      "Launch NVIDIA App"),
     ]
     return [
         Result(title=f"nv {cmd}", subtitle=desc, icon=ICON)
@@ -469,7 +446,6 @@ def query(query_text: str) -> ResultResponse:
         "stats":     lambda: handle_stats(),
         "clips":     lambda: handle_clips(arg),
         "shots":     lambda: handle_shots(arg),
-        "open":      lambda: handle_open(),
     }
 
     if cmd in dispatch:
