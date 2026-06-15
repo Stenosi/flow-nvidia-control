@@ -6,6 +6,14 @@ Subcommands: info | driver | changelog | stats | clips [game] | shots [game] | o
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path as _Path
+
+# Add lib/ to sys.path so Flow Launcher can find bundled dependencies
+_lib = _Path(__file__).parent / "lib"
+if _lib.exists() and str(_lib) not in sys.path:
+    sys.path.insert(0, str(_lib))
+
 import time
 from pathlib import Path
 from typing import Optional
@@ -246,10 +254,10 @@ def list_media_files(
 def _make_media_result(f: Path) -> Result:
     mtime = time.strftime("%d/%m/%Y %H:%M", time.localtime(f.stat().st_mtime))
     return Result(
-        Title=f.name,
-        SubTitle=f"{f.parent.name}  —  {mtime}",
-        IcoPath=ICON,
-        JsonRPCAction={
+        title=f.name,
+        Subtitle=f"{f.parent.name}  —  {mtime}",
+        icon=ICON,
+        json_rpc_action={
             "method": "open_url",
             "parameters": [f.as_uri()],
         },
@@ -264,28 +272,28 @@ def handle_info() -> list[Result]:
     try:
         gpu = get_gpu_info_wmi()
     except RuntimeError as e:
-        return [Result(Title="NVIDIA GPU not detected", SubTitle=str(e), IcoPath=ICON)]
+        return [Result(title="NVIDIA GPU not detected", Subtitle=str(e), icon=ICON)]
     except Exception as e:
-        return [Result(Title="WMI error", SubTitle=str(e), IcoPath=ICON)]
+        return [Result(title="WMI error", Subtitle=str(e), icon=ICON)]
 
     vram_str = f"{gpu['vram_mb']} MB" if gpu["vram_mb"] > 0 else "N/A (> 4 GB or unreadable)"
     return [
         Result(
-            Title=gpu["name"],
-            SubTitle="GPU name",
-            IcoPath=ICON,
-            CopyText=gpu["name"],
+            title=gpu["name"],
+            Subtitle="GPU name",
+            icon=ICON,
+            copy_text=gpu["name"],
         ),
         Result(
-            Title=f"Driver {gpu['driver_version']}",
-            SubTitle="Installed driver version  —  Click to copy",
-            IcoPath=ICON,
-            CopyText=gpu["driver_version"],
+            title=f"Driver {gpu['driver_version']}",
+            Subtitle="Installed driver version  —  Click to copy",
+            icon=ICON,
+            copy_text=gpu["driver_version"],
         ),
         Result(
-            Title=f"VRAM: {vram_str}",
-            SubTitle="Total video memory",
-            IcoPath=ICON,
+            title=f"VRAM: {vram_str}",
+            Subtitle="Total video memory",
+            icon=ICON,
         ),
     ]
 
@@ -295,26 +303,26 @@ def handle_driver() -> list[Result]:
         info = _get_cached_driver_check()
     except requests.Timeout:
         return [Result(
-            Title="NVIDIA server timeout",
-            SubTitle=f"No response within {HTTP_TIMEOUT}s. Try again later.",
-            IcoPath=ICON,
+            title="NVIDIA server timeout",
+            Subtitle=f"No response within {HTTP_TIMEOUT}s. Try again later.",
+            icon=ICON,
         )]
     except requests.ConnectionError:
         return [Result(
-            Title="No Internet connection",
-            SubTitle="Check your network and try again",
-            IcoPath=ICON,
+            title="No Internet connection",
+            Subtitle="Check your network and try again",
+            icon=ICON,
         )]
     except RuntimeError as e:
-        return [Result(Title="Driver check error", SubTitle=str(e), IcoPath=ICON)]
+        return [Result(title="Driver check error", Subtitle=str(e), icon=ICON)]
     except Exception as e:
-        return [Result(Title="Unexpected error", SubTitle=str(e), IcoPath=ICON)]
+        return [Result(title="Unexpected error", Subtitle=str(e), icon=ICON)]
 
     if info["is_up_to_date"]:
         return [Result(
-            Title=f"Driver up to date ({info['installed_version']})",
-            SubTitle="You are running the latest available driver",
-            IcoPath=ICON,
+            title=f"Driver up to date ({info['installed_version']})",
+            Subtitle="You are running the latest available driver",
+            icon=ICON,
         )]
 
     action = {}
@@ -323,16 +331,16 @@ def handle_driver() -> list[Result]:
 
     return [
         Result(
-            Title=f"Update available: {info['latest_version']}",
-            SubTitle=f"Installed: {info['installed_version']}  —  Click to download",
-            IcoPath=ICON,
-            JsonRPCAction=action,
+            title=f"Update available: {info['latest_version']}",
+            Subtitle=f"Installed: {info['installed_version']}  —  Click to download",
+            icon=ICON,
+            json_rpc_action=action,
         ),
         Result(
-            Title="Open NVIDIA driver download page",
-            SubTitle=info["download_url"] or NVIDIA_DRIVERS_URL,
-            IcoPath=ICON,
-            JsonRPCAction=action if action else {
+            title="Open NVIDIA driver download page",
+            Subtitle=info["download_url"] or NVIDIA_DRIVERS_URL,
+            icon=ICON,
+            json_rpc_action=action if action else {
                 "method": "open_url",
                 "parameters": [NVIDIA_DRIVERS_URL],
             },
@@ -347,44 +355,44 @@ def handle_changelog() -> list[Result]:
         url = cached["release_notes_url"]
 
     return [Result(
-        Title="Open NVIDIA Release Notes",
-        SubTitle=url,
-        IcoPath=ICON,
-        JsonRPCAction={"method": "open_url", "parameters": [url]},
+        title="Open NVIDIA Release Notes",
+        Subtitle=url,
+        icon=ICON,
+        json_rpc_action={"method": "open_url", "parameters": [url]},
     )]
 
 
 def handle_stats() -> list[Result]:
     if not _NVML_AVAILABLE:
         return [Result(
-            Title="pynvml not installed",
-            SubTitle="In the plugin folder run: pip install nvidia-ml-py",
-            IcoPath=ICON,
+            title="pynvml not installed",
+            Subtitle="In the plugin folder run: pip install nvidia-ml-py",
+            icon=ICON,
         )]
 
     try:
         s = get_gpu_stats_nvml()
     except _pynvml.NVMLError as e:
-        return [Result(Title="pynvml error", SubTitle=str(e), IcoPath=ICON)]
+        return [Result(title="pynvml error", Subtitle=str(e), icon=ICON)]
     except Exception as e:
-        return [Result(Title="GPU stats error", SubTitle=str(e), IcoPath=ICON)]
+        return [Result(title="GPU stats error", Subtitle=str(e), icon=ICON)]
 
     vram_pct = (s["vram_used_mb"] * 100 // s["vram_total_mb"]) if s["vram_total_mb"] else 0
     return [
         Result(
-            Title=f"GPU: {s['utilization']}%",
-            SubTitle="Graphics processor utilization",
-            IcoPath=ICON,
+            title=f"GPU: {s['utilization']}%",
+            Subtitle="Graphics processor utilization",
+            icon=ICON,
         ),
         Result(
-            Title=f"VRAM: {s['vram_used_mb']} / {s['vram_total_mb']} MB  ({vram_pct}%)",
-            SubTitle="Video memory in use",
-            IcoPath=ICON,
+            title=f"VRAM: {s['vram_used_mb']} / {s['vram_total_mb']} MB  ({vram_pct}%)",
+            Subtitle="Video memory in use",
+            icon=ICON,
         ),
         Result(
-            Title=f"Temperature: {s['temperature']}°C",
-            SubTitle="GPU core temperature",
-            IcoPath=ICON,
+            title=f"Temperature: {s['temperature']}°C",
+            Subtitle="GPU core temperature",
+            icon=ICON,
         ),
     ]
 
@@ -394,9 +402,9 @@ def handle_clips(game_filter: Optional[str]) -> list[Result]:
     if not files:
         suffix = f" for '{game_filter}'" if game_filter else ""
         return [Result(
-            Title=f"No clips found{suffix}",
-            SubTitle=str(CLIPS_DIR),
-            IcoPath=ICON,
+            title=f"No clips found{suffix}",
+            Subtitle=str(CLIPS_DIR),
+            icon=ICON,
         )]
     return [_make_media_result(f) for f in files]
 
@@ -411,9 +419,9 @@ def handle_shots(game_filter: Optional[str]) -> list[Result]:
     if not files:
         suffix = f" for '{game_filter}'" if game_filter else ""
         return [Result(
-            Title=f"No screenshots found{suffix}",
-            SubTitle=str(shots_dir),
-            IcoPath=ICON,
+            title=f"No screenshots found{suffix}",
+            Subtitle=str(shots_dir),
+            icon=ICON,
         )]
     return [_make_media_result(f) for f in files]
 
@@ -422,16 +430,16 @@ def handle_open() -> list[Result]:
     exe = next((p for p in NVIDIA_APP_PATHS if p.exists()), None)
     if exe:
         return [Result(
-            Title="Open NVIDIA App",
-            SubTitle=str(exe),
-            IcoPath=ICON,
-            JsonRPCAction={"method": "open_url", "parameters": [exe.as_uri()]},
+            title="Open NVIDIA App",
+            Subtitle=str(exe),
+            icon=ICON,
+            json_rpc_action={"method": "open_url", "parameters": [exe.as_uri()]},
         )]
     return [Result(
-        Title="NVIDIA App not found",
-        SubTitle="Download NVIDIA App from nvidia.com",
-        IcoPath=ICON,
-        JsonRPCAction={
+        title="NVIDIA App not found",
+        Subtitle="Download NVIDIA App from nvidia.com",
+        icon=ICON,
+        json_rpc_action={
             "method": "open_url",
             "parameters": ["https://www.nvidia.com/en-us/software/nvidia-app/"],
         },
@@ -449,7 +457,7 @@ def _help_results(partial: str) -> list[Result]:
         ("open",      "Launch NVIDIA App"),
     ]
     return [
-        Result(Title=f"nv {cmd}", SubTitle=desc, IcoPath=ICON)
+        Result(title=f"nv {cmd}", Subtitle=desc, icon=ICON)
         for cmd, desc in commands
         if not partial or cmd.startswith(partial)
     ]
