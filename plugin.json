@@ -1,0 +1,14 @@
+{
+  "$schema": "https://www.flowlauncher.com/schemas/plugin.schema.json",
+  "ID": "73bb4ffd-4f56-461b-99ca-d9ddee0a61dc",
+  "ActionKeyword": "nv",
+  "Name": "NvidiaControl",
+  "Description": "Control your NVIDIA GPU: driver info, live stats, clips and screenshots",
+  "Author": "Stenosi",
+  "Version": "1.0.0",
+  "Language": "python",
+  "ExecuteFileName": "main.py",
+  "IcoPath": "Images/icon.png",
+  "MinimumAppVersion": "1.8.0",
+  "Website": "https://github.com/Stenosi/Flow.Launcher.Plugin.NvidiaControl"
+}

@@ -1,0 +1,52 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies into lib/
+        run: |
+          pip install -r requirements.txt --target lib/
+
+      - name: Create plugin zip
+        shell: pwsh
+        run: |
+          $pluginName = "Flow.Launcher.Plugin.NvidiaControl"
+          $zipName    = "$pluginName.zip"
+
+          # Raccoglie tutto escludendo cartelle di sviluppo
+          $toExclude = @('.git', '.venv', '.github', '__pycache__', '.gitignore', '*.pyc')
+          $items = Get-ChildItem -Path . | Where-Object {
+            $name = $_.Name
+            -not ($toExclude | Where-Object { $name -like $_ })
+          }
+
+          Compress-Archive -Path $items.FullName -DestinationPath $zipName -Force
+          Write-Host "Created: $zipName ($(((Get-Item $zipName).Length / 1KB).ToString('N1')) KB)"
+
+      - name: Create GitHub Release and upload zip
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "Flow.Launcher.Plugin.NvidiaControl.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+          draft: false
+          prerelease: false
+          generateReleaseNotes: true
