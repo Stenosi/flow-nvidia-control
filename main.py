@@ -14,6 +14,8 @@ _lib = _Path(__file__).parent / "lib"
 if _lib.exists() and str(_lib) not in sys.path:
     sys.path.insert(0, str(_lib))
 
+import json
+import os
 import re
 import time
 from pathlib import Path
@@ -41,16 +43,9 @@ def _change_query(query: str) -> dict:
 
 ICON = "Images/icon.png"
 
-# Clip/screenshot folder candidates — first existing path wins
-_CLIPS_CANDIDATES = [
-    Path.home() / "Videos" / "NVIDIA",
-    Path.home() / "Videos" / "NVIDIA App",
-]
-_SHOTS_CANDIDATES = [
-    Path.home() / "Pictures" / "NVIDIA",
-    Path.home() / "Pictures" / "NVIDIA App",
-    Path.home() / "Videos" / "NVIDIA",
-]
+_DEFAULT_CLIPS = r"%USERPROFILE%\Videos\NVIDIA"
+_DEFAULT_SHOTS = r"%USERPROFILE%\Pictures\NVIDIA"
+_CONFIG_PATH = _Path(__file__).parent / "config.json"
 
 GPU_DATA_URL = "https://raw.githubusercontent.com/ZenitH-AT/nvidia-data/main/gpu-data.json"
 PROCESS_FIND_URL = "https://www.nvidia.com/Download/processFind.aspx"
@@ -245,8 +240,21 @@ def _get_cached_driver_check(gpu_name: str, installed_version: str) -> dict:
 # Media file helpers
 # ---------------------------------------------------------------------------
 
-def _resolve_dir(candidates: list[Path]) -> Optional[Path]:
-    return next((p for p in candidates if p.exists()), None)
+def _load_config() -> dict:
+    try:
+        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _clips_dir() -> Path:
+    raw = _load_config().get("clips_dir", _DEFAULT_CLIPS).strip() or _DEFAULT_CLIPS
+    return Path(os.path.expandvars(raw))
+
+
+def _shots_dir() -> Path:
+    raw = _load_config().get("shots_dir", _DEFAULT_SHOTS).strip() or _DEFAULT_SHOTS
+    return Path(os.path.expandvars(raw))
 
 
 def list_media_files(
@@ -451,13 +459,13 @@ def _folder_result(label: str, path: Path, query_cmd: str) -> Result:
 
 
 def handle_clips(game_filter: Optional[str]) -> list[Result]:
-    clips_dir = _resolve_dir(_CLIPS_CANDIDATES)
+    clips_dir = _clips_dir()
     results: list[Result] = []
 
-    if not clips_dir:
+    if not clips_dir.exists():
         return [Result(
             title="Clips folder not found",
-            subtitle=f"Checked: {', '.join(str(p) for p in _CLIPS_CANDIDATES)}",
+            subtitle=str(clips_dir),
             icon=ICON,
         )]
 
@@ -499,13 +507,13 @@ def handle_clips(game_filter: Optional[str]) -> list[Result]:
 
 
 def handle_shots(game_filter: Optional[str]) -> list[Result]:
-    shots_dir = _resolve_dir(_SHOTS_CANDIDATES)
+    shots_dir = _shots_dir()
     results: list[Result] = []
 
-    if not shots_dir:
+    if not shots_dir.exists():
         return [Result(
             title="Screenshots folder not found",
-            subtitle=f"Checked: {', '.join(str(p) for p in _SHOTS_CANDIDATES)}",
+            subtitle=str(shots_dir),
             icon=ICON,
         )]
 
@@ -546,6 +554,41 @@ def handle_shots(game_filter: Optional[str]) -> list[Result]:
     return results
 
 
+def handle_settings() -> list[Result]:
+    config = _load_config()
+    clips_raw = config.get("clips_dir", _DEFAULT_CLIPS) or _DEFAULT_CLIPS
+    shots_raw = config.get("shots_dir", _DEFAULT_SHOTS) or _DEFAULT_SHOTS
+
+    # Auto-create config.json with defaults if it doesn't exist yet
+    if not _CONFIG_PATH.exists():
+        _CONFIG_PATH.write_text(
+            json.dumps({"clips_dir": _DEFAULT_CLIPS, "shots_dir": _DEFAULT_SHOTS}, indent=2),
+            encoding="utf-8",
+        )
+
+    return [
+        Result(
+            title="Open config.json",
+            subtitle=str(_CONFIG_PATH),
+            icon=ICON,
+            score=300_000,
+            json_rpc_action=open_uri(_CONFIG_PATH.as_uri()),
+        ),
+        Result(
+            title=f"Clips: {clips_raw}",
+            subtitle=os.path.expandvars(clips_raw),
+            icon=ICON,
+            score=200_000,
+        ),
+        Result(
+            title=f"Shots: {shots_raw}",
+            subtitle=os.path.expandvars(shots_raw),
+            icon=ICON,
+            score=100_000,
+        ),
+    ]
+
+
 def _help_results(partial: str) -> list[Result]:
     commands = [
         ("info",      "GPU name, driver status, total VRAM"),
@@ -553,6 +596,7 @@ def _help_results(partial: str) -> list[Result]:
         ("stats",     "Live GPU utilization %, VRAM usage, temperature"),
         ("clips",     "List recent video clips  (e.g. nv clips fortnite)"),
         ("shots",     "List recent screenshots  (e.g. nv shots cyberpunk)"),
+        ("settings",  "Configure clips and screenshots directories"),
     ]
     return [
         Result(
@@ -582,6 +626,7 @@ def query(query_text: str) -> ResultResponse:
         "stats":     lambda: handle_stats(),
         "clips":     lambda: handle_clips(arg),
         "shots":     lambda: handle_shots(arg),
+        "settings":  lambda: handle_settings(),
     }
 
     if cmd in dispatch:

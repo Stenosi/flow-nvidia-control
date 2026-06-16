@@ -15,6 +15,7 @@ A [Flow Launcher](https://www.flowlauncher.com/) plugin to control your NVIDIA G
 | `nv stats` | Live GPU utilization %, VRAM usage, core temperature |
 | `nv clips [game]` | List recent NVIDIA recordings, filterable by game name |
 | `nv shots [game]` | List recent NVIDIA screenshots, filterable by game name |
+| `nv settings` | View and edit clips/screenshots directory paths |
 
 ## Requirements
 
@@ -47,18 +48,30 @@ nv clips        → list all recent NVIDIA recordings
 nv clips fortnite → list clips from Fortnite sessions (fuzzy match)
 nv shots        → list all recent screenshots
 nv shots cyberpunk → list Cyberpunk 2077 screenshots (fuzzy match)
+nv settings     → view current directory paths, open config file
 ```
 
 ## Configuration
 
-Default paths used by the plugin:
+Type `nv settings` to see the current paths and open `config.json` directly from Flow Launcher.
 
-| Setting | Default path |
+Default paths:
+
+| Setting | Default |
 | --- | --- |
-| Video clips | `~/Videos/NVIDIA App` |
-| Screenshots | `~/Pictures/NVIDIA App` |
+| Video clips | `%USERPROFILE%\Videos\NVIDIA` |
+| Screenshots | `%USERPROFILE%\Pictures\NVIDIA` |
 
-If NVIDIA App uses a custom save location, update `CLIPS_DIR` and `SHOTS_DIR` at the top of `main.py`.
+To use a custom location, edit `config.json` in the plugin folder:
+
+```json
+{
+  "clips_dir": "D:\\Recordings\\NVIDIA",
+  "shots_dir": "D:\\Screenshots\\NVIDIA"
+}
+```
+
+Changes take effect immediately — no restart required.
 
 ## Development
 
