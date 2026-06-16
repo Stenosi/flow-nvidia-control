@@ -44,9 +44,9 @@ nv info               → GPU name, driver version + update status, VRAM
 nv changelog          → open latest driver release notes
 nv stats              → live GPU %, VRAM, temperature (refresh with ctrl + R)
 nv clips              → list all recent NVIDIA recordings
-nv clips [GAME]       → list clips from [GAME] sessions (fuzzy match)
+nv clips [game]       → list clips from [game] sessions (fuzzy match)
 nv shots              → list all recent screenshots
-nv shots [GAME]       → list [GAME] screenshots (fuzzy match)
+nv shots [game]       → list [game] screenshots (fuzzy match)
 ```
 
 ## Configuration
