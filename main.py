@@ -1,7 +1,7 @@
 """
 flow-nvidia-control
 Keyword: nv
-Subcommands: info | driver | changelog | stats | clips [game] | shots [game]
+Subcommands: info | changelog | stats | clips [game] | shots [game]
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ _lib = _Path(__file__).parent / "lib"
 if _lib.exists() and str(_lib) not in sys.path:
     sys.path.insert(0, str(_lib))
 
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -21,23 +22,42 @@ from typing import Optional
 import requests
 from pyflowlauncher import Plugin, Result, send_results
 from pyflowlauncher.result import JsonRPCResponse as ResultResponse
-from pyflowlauncher.api import open_url, open_uri
+from pyflowlauncher.api import open_url, open_uri, shell_run
 
 plugin = Plugin()
+
+
+def _change_query(query: str) -> dict:
+    """ChangeQuery action that keeps Flow Launcher open after execution."""
+    return {
+        "Method": "Flow.Launcher.ChangeQuery",
+        "Parameters": [query, True],
+        "DontHideAfterAction": True,
+    }
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 ICON = "Images/icon.png"
-CLIPS_DIR = Path.home() / "Videos" / "NVIDIA App"
-SHOTS_DIR = Path.home() / "Pictures" / "NVIDIA App"
-GPU_DATA_URL = "https://raw.githubusercontent.com/ZenitH-AT/nvidia-data/main/desktop-gpu.json"
-AJAX_DRIVER_URL = (
-    "https://gfwsl.geforce.com/services_toolkit/services/com/nvidia/services/AjaxDriverService.php"
-)
+
+# Clip/screenshot folder candidates — first existing path wins
+_CLIPS_CANDIDATES = [
+    Path.home() / "Videos" / "NVIDIA",
+    Path.home() / "Videos" / "NVIDIA App",
+]
+_SHOTS_CANDIDATES = [
+    Path.home() / "Pictures" / "NVIDIA",
+    Path.home() / "Pictures" / "NVIDIA App",
+    Path.home() / "Videos" / "NVIDIA",
+]
+
+GPU_DATA_URL = "https://raw.githubusercontent.com/ZenitH-AT/nvidia-data/main/gpu-data.json"
+PROCESS_FIND_URL = "https://www.nvidia.com/Download/processFind.aspx"
 NVIDIA_DRIVERS_URL = "https://www.nvidia.com/en-us/drivers/results/"
-OS_ID = 57  # Windows 10/11 64-bit
+NVIDIA_RESULTS_URL = "https://www.nvidia.com/download/driverResults.aspx/{id}/en-us"
+OS_ID = 57   # Windows 10/11 64-bit
+DCH_ID = 1   # DCH (modern) driver packaging
 HTTP_TIMEOUT = 5  # seconds
 
 # Driver check cache — avoids HTTP calls on every keystroke
@@ -107,6 +127,8 @@ def _parse_wmi_driver_version(raw: str) -> str:
     return raw
 
 
+
+
 # ---------------------------------------------------------------------------
 # pynvml helpers
 # ---------------------------------------------------------------------------
@@ -137,77 +159,83 @@ def get_gpu_stats_nvml() -> dict:
 # ---------------------------------------------------------------------------
 
 def fetch_gpu_pfid(gpu_name: str) -> Optional[str]:
-    """Download ZenitH-AT gpu-data.json and return the pfid for this GPU."""
-    try:
-        r = requests.get(GPU_DATA_URL, timeout=HTTP_TIMEOUT)
-        r.raise_for_status()
-        gpu_data: dict = r.json()
-    except Exception:
-        return None
+    """Search the ZenitH-AT gpu-data.json (notebook then desktop) for the pfid.
 
+    Lets requests.Timeout and requests.ConnectionError propagate so the caller
+    can show a meaningful error.  Returns None only when the GPU is genuinely
+    absent from the database.
+    """
+    search_name = gpu_name
+    if search_name.upper().startswith("NVIDIA "):
+        search_name = search_name[7:]
+
+    r = requests.get(GPU_DATA_URL, timeout=HTTP_TIMEOUT)
+    r.raise_for_status()
+    data: dict = r.json()
+
+    # Try notebook first (laptop GPUs), then desktop
+    for section in ("notebook", "desktop"):
+        pfid = _match_pfid(search_name, data.get(section, {}))
+        if pfid:
+            return pfid
+    return None
+
+
+def _match_pfid(search_name: str, gpu_data: dict) -> Optional[str]:
+    if not gpu_data:
+        return None
     if _FUZZ_AVAILABLE:
-        result = _fuzz_process.extractOne(gpu_name, gpu_data.keys())
+        result = _fuzz_process.extractOne(search_name, gpu_data.keys())
         if result and result[1] >= 60:
             return gpu_data[result[0]]
     else:
-        gpu_lower = gpu_name.lower()
+        name_lower = search_name.lower()
         for key, pfid in gpu_data.items():
-            if key.lower() in gpu_lower or gpu_lower in key.lower():
+            if key.lower() in name_lower or name_lower in key.lower():
                 return pfid
-
     return None
 
 
 def check_latest_driver(pfid: str, installed_version: str) -> dict:
-    """Call AjaxDriverService and compare with installed driver version."""
-    params = {
-        "func": "DriverManualLookup",
-        "pfid": pfid,
-        "osID": OS_ID,
-        "dch": 1,
-        "languageCode": 1,
-        "numberOfResults": 1,
-    }
-    r = requests.get(AJAX_DRIVER_URL, params=params, timeout=HTTP_TIMEOUT)
+    """Query processFind.aspx for the latest driver version for this GPU."""
+    r = requests.get(
+        PROCESS_FIND_URL,
+        params={"pfid": pfid, "osid": OS_ID, "dtcid": DCH_ID},
+        timeout=HTTP_TIMEOUT,
+    )
     r.raise_for_status()
-    data = r.json()
+    html = r.text
 
-    ids = data.get("IDS", [])
-    if not ids:
-        raise RuntimeError("No driver found for this GPU in the NVIDIA API")
+    version_match = re.search(r'<td class="gridItem">(\d{3}\.\d{2})</td>', html)
+    if not version_match:
+        raise RuntimeError("No driver found in NVIDIA download database")
+    latest_ver = version_match.group(1)
 
-    dl_info = ids[0].get("downloadInfo", {})
-    latest_ver = dl_info.get("Version", "").strip()
-    download_url = dl_info.get("DownloadURL", "").strip()
-    release_notes_url = dl_info.get("releaseNotes", "").strip()
-
-    if not latest_ver:
-        raise RuntimeError(f"Unexpected NVIDIA API response structure: {data}")
+    id_match = re.search(r'driverResults\.aspx/(\d+)/', html)
+    download_url = (
+        NVIDIA_RESULTS_URL.format(id=id_match.group(1)) if id_match else NVIDIA_DRIVERS_URL
+    )
 
     return {
         "latest_version": latest_ver,
         "installed_version": installed_version,
         "is_up_to_date": latest_ver == installed_version,
         "download_url": download_url,
-        "release_notes_url": release_notes_url,
+        "release_notes_url": download_url,
     }
 
 
-def _get_cached_driver_check() -> dict:
-    """Cache wrapper (TTL=5 min) around the driver check to avoid repeated HTTP calls."""
+def _get_cached_driver_check(gpu_name: str, installed_version: str) -> dict:
+    """Return driver check result, re-fetching only when the 5-minute cache expires."""
     now = time.time()
     if _driver_cache["data"] and (now - _driver_cache["timestamp"]) < CACHE_TTL:
         return _driver_cache["data"]
 
-    gpu_info = get_gpu_info_wmi()
-    pfid = fetch_gpu_pfid(gpu_info["name"])
+    pfid = fetch_gpu_pfid(gpu_name)
     if not pfid:
-        raise RuntimeError(
-            f"GPU '{gpu_info['name']}' not found in NVIDIA database. "
-            "Check manually at nvidia.com/drivers"
-        )
+        raise RuntimeError("GPU not found in NVIDIA database")
 
-    result = check_latest_driver(pfid, gpu_info["driver_version"])
+    result = check_latest_driver(pfid, installed_version)
     _driver_cache["data"] = result
     _driver_cache["timestamp"] = now
     return result
@@ -216,6 +244,10 @@ def _get_cached_driver_check() -> dict:
 # ---------------------------------------------------------------------------
 # Media file helpers
 # ---------------------------------------------------------------------------
+
+def _resolve_dir(candidates: list[Path]) -> Optional[Path]:
+    return next((p for p in candidates if p.exists()), None)
+
 
 def list_media_files(
     base_dir: Path,
@@ -227,10 +259,13 @@ def list_media_files(
     if not base_dir.exists():
         return []
 
+    seen: set[Path] = set()
     files: list[Path] = []
     for ext in extensions:
-        files.extend(base_dir.rglob(f"*.{ext}"))
-        files.extend(base_dir.rglob(f"*.{ext.upper()}"))
+        for f in base_dir.rglob(f"*.{ext}"):
+            if f not in seen:
+                seen.add(f)
+                files.append(f)
 
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
 
@@ -252,7 +287,7 @@ def _make_media_result(f: Path) -> Result:
     return Result(
         title=f.name,
         subtitle=f"{f.parent.name}  —  {mtime}",
-        icon=ICON,
+        icon=str(f),
         json_rpc_action=open_uri(f.as_uri()),
     )
 
@@ -269,70 +304,66 @@ def handle_info() -> list[Result]:
     except Exception as e:
         return [Result(title="WMI error", subtitle=str(e), icon=ICON)]
 
-    vram_str = f"{gpu['vram_mb']} MB" if gpu["vram_mb"] > 0 else "N/A (> 4 GB or unreadable)"
-    return [
+    # VRAM: WMI AdapterRAM is 32-bit and caps at 4 GB; fall back to pynvml
+    vram_mb = gpu["vram_mb"]
+    vram_error: Optional[str] = None
+    if vram_mb <= 0 and _NVML_AVAILABLE:
+        try:
+            vram_mb = get_gpu_stats_nvml()["vram_total_mb"]
+        except Exception as e:
+            vram_error = f"{type(e).__name__}: {e}"
+    vram_str = f"{vram_mb} MB" if vram_mb > 0 else "N/A"
+
+    results = [
         Result(
             title=gpu["name"],
-            subtitle="GPU name",
+            subtitle="GPU",
             icon=ICON,
+            score=300_000,
             copy_text=gpu["name"],
         ),
-        Result(
-            title=f"Driver {gpu['driver_version']}",
-            subtitle="Installed driver version  —  Click to copy",
-            icon=ICON,
-            copy_text=gpu["driver_version"],
-        ),
-        Result(
-            title=f"VRAM: {vram_str}",
-            subtitle="Total video memory",
-            icon=ICON,
-        ),
     ]
 
-
-def handle_driver() -> list[Result]:
+    # Driver version + update check — errors are shown in the subtitle
+    driver_subtitle = "Installed driver"
+    driver_action = None
     try:
-        info = _get_cached_driver_check()
+        info = _get_cached_driver_check(gpu["name"], gpu["driver_version"])
+        if info["is_up_to_date"]:
+            driver_subtitle = "Up to date"
+        else:
+            dl_url = info["download_url"] or NVIDIA_DRIVERS_URL
+            driver_subtitle = f"Update available: {info['latest_version']} — click to download"
+            driver_action = open_url(dl_url)
     except requests.Timeout:
-        return [Result(
-            title="NVIDIA server timeout",
-            subtitle=f"No response within {HTTP_TIMEOUT}s. Try again later.",
-            icon=ICON,
-        )]
+        driver_subtitle = "Driver check timed out — click to open NVIDIA website"
+        driver_action = open_url(NVIDIA_DRIVERS_URL)
     except requests.ConnectionError:
-        return [Result(
-            title="No Internet connection",
-            subtitle="Check your network and try again",
-            icon=ICON,
-        )]
+        driver_subtitle = "No internet — driver check skipped"
     except RuntimeError as e:
-        return [Result(title="Driver check error", subtitle=str(e), icon=ICON)]
+        driver_subtitle = f"Driver DB: {e}"
+        driver_action = open_url(NVIDIA_DRIVERS_URL)
     except Exception as e:
-        return [Result(title="Unexpected error", subtitle=str(e), icon=ICON)]
+        driver_subtitle = f"Driver check error: {type(e).__name__}: {e}"
+        driver_action = open_url(NVIDIA_DRIVERS_URL)
 
-    if info["is_up_to_date"]:
-        return [Result(
-            title=f"Driver up to date ({info['installed_version']})",
-            subtitle="You are running the latest available driver",
-            icon=ICON,
-        )]
+    results.append(Result(
+        title=f"Driver {gpu['driver_version']}",
+        subtitle=driver_subtitle,
+        icon=ICON,
+        score=200_000,
+        copy_text=gpu["driver_version"],
+        json_rpc_action=driver_action,
+    ))
 
-    dl_url = info["download_url"] or NVIDIA_DRIVERS_URL
-    return [
-        Result(
-            title=f"Update available: {info['latest_version']}",
-            subtitle=f"Installed: {info['installed_version']}  —  Click to download",
-            icon=ICON,
-            json_rpc_action=open_url(dl_url),
-        ),
-        Result(
-            title="Open NVIDIA driver download page",
-            subtitle=dl_url,
-            icon=ICON,
-            json_rpc_action=open_url(dl_url),
-        ),
-    ]
+    results.append(Result(
+        title=f"VRAM: {vram_str}",
+        subtitle=vram_error if vram_error else "Total video memory",
+        icon=ICON,
+        score=100_000,
+    ))
+
+    return results
 
 
 def handle_changelog() -> list[Result]:
@@ -384,46 +415,152 @@ def handle_stats() -> list[Result]:
     ]
 
 
+def _get_game_dirs(base_dir: Path) -> list[Path]:
+    """Return immediate subdirectories sorted by most recently modified."""
+    dirs = [p for p in base_dir.iterdir() if p.is_dir()]
+    dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return dirs
+
+
+def _match_game_dir(base_dir: Path, game_filter: str) -> Optional[Path]:
+    """Return the best-matching game subdirectory for game_filter, or None."""
+    dirs = _get_game_dirs(base_dir)
+    if not dirs:
+        return None
+    if _FUZZ_AVAILABLE:
+        names = [d.name for d in dirs]
+        result = _fuzz_process.extractOne(game_filter, names)
+        if result and result[1] >= 60:
+            return base_dir / result[0]
+    else:
+        fl = game_filter.lower()
+        for d in dirs:
+            if fl in d.name.lower():
+                return d
+    return None
+
+
+def _folder_result(label: str, path: Path, query_cmd: str) -> Result:
+    return Result(
+        title=label,
+        subtitle=str(path),
+        icon=ICON,
+        score=100_000,
+        json_rpc_action=shell_run(str(path), "explorer.exe"),
+    )
+
+
 def handle_clips(game_filter: Optional[str]) -> list[Result]:
-    files = list_media_files(CLIPS_DIR, ["mp4"], game_filter)
-    if not files:
-        suffix = f" for '{game_filter}'" if game_filter else ""
+    clips_dir = _resolve_dir(_CLIPS_CANDIDATES)
+    results: list[Result] = []
+
+    if not clips_dir:
         return [Result(
-            title=f"No clips found{suffix}",
-            subtitle=str(CLIPS_DIR),
+            title="Clips folder not found",
+            subtitle=f"Checked: {', '.join(str(p) for p in _CLIPS_CANDIDATES)}",
             icon=ICON,
         )]
-    return [_make_media_result(f) for f in files]
+
+    if game_filter:
+        # Level 2: show contents of the matched game folder
+        game_dir = _match_game_dir(clips_dir, game_filter)
+        target = game_dir or clips_dir
+        results.append(_folder_result(f"Open {target.name} folder", target, "clips"))
+        files = list_media_files(target, ["mp4"], None)
+        if files:
+            results.extend(_make_media_result(f) for f in files)
+        else:
+            results.append(Result(
+                title=f"No clips found in '{target.name}'",
+                subtitle=str(target),
+                icon=ICON,
+            ))
+    else:
+        # Level 1: show game folders
+        results.append(_folder_result("Open clips folder", clips_dir, "clips"))
+        game_dirs = _get_game_dirs(clips_dir)
+        if game_dirs:
+            for d in game_dirs:
+                results.append(Result(
+                    title=d.name,
+                    subtitle=str(d),
+                    icon=ICON,
+                    json_rpc_action=_change_query(f"nv clips {d.name} "),
+                ))
+        else:
+            # No subfolders — fall back to listing files directly
+            files = list_media_files(clips_dir, ["mp4"], None)
+            if files:
+                results.extend(_make_media_result(f) for f in files)
+            else:
+                results.append(Result(title="No clips found", subtitle=str(clips_dir), icon=ICON))
+
+    return results
 
 
 def handle_shots(game_filter: Optional[str]) -> list[Result]:
-    shots_dir = SHOTS_DIR
-    alt_dir = CLIPS_DIR / "Screenshots"
-    if not shots_dir.exists() and alt_dir.exists():
-        shots_dir = alt_dir
+    shots_dir = _resolve_dir(_SHOTS_CANDIDATES)
+    results: list[Result] = []
 
-    files = list_media_files(shots_dir, ["jpg", "jpeg", "png"], game_filter)
-    if not files:
-        suffix = f" for '{game_filter}'" if game_filter else ""
+    if not shots_dir:
         return [Result(
-            title=f"No screenshots found{suffix}",
-            subtitle=str(shots_dir),
+            title="Screenshots folder not found",
+            subtitle=f"Checked: {', '.join(str(p) for p in _SHOTS_CANDIDATES)}",
             icon=ICON,
         )]
-    return [_make_media_result(f) for f in files]
+
+    if game_filter:
+        # Level 2: show contents of the matched game folder
+        game_dir = _match_game_dir(shots_dir, game_filter)
+        target = game_dir or shots_dir
+        results.append(_folder_result(f"Open {target.name} folder", target, "shots"))
+        files = list_media_files(target, ["jpg", "jpeg", "png"], None)
+        if files:
+            results.extend(_make_media_result(f) for f in files)
+        else:
+            results.append(Result(
+                title=f"No screenshots found in '{target.name}'",
+                subtitle=str(target),
+                icon=ICON,
+            ))
+    else:
+        # Level 1: show game folders
+        results.append(_folder_result("Open screenshots folder", shots_dir, "shots"))
+        game_dirs = _get_game_dirs(shots_dir)
+        if game_dirs:
+            for d in game_dirs:
+                results.append(Result(
+                    title=d.name,
+                    subtitle=str(d),
+                    icon=ICON,
+                    json_rpc_action=_change_query(f"nv shots {d.name} "),
+                ))
+        else:
+            # No subfolders — fall back to listing files directly
+            files = list_media_files(shots_dir, ["jpg", "jpeg", "png"], None)
+            if files:
+                results.extend(_make_media_result(f) for f in files)
+            else:
+                results.append(Result(title="No screenshots found", subtitle=str(shots_dir), icon=ICON))
+
+    return results
 
 
 def _help_results(partial: str) -> list[Result]:
     commands = [
-        ("info",      "GPU name, installed driver version, total VRAM"),
-        ("driver",    "Compare installed driver with latest from NVIDIA"),
+        ("info",      "GPU name, driver status, total VRAM"),
         ("changelog", "Open latest NVIDIA driver release notes in browser"),
         ("stats",     "Live GPU utilization %, VRAM usage, temperature"),
         ("clips",     "List recent video clips  (e.g. nv clips fortnite)"),
         ("shots",     "List recent screenshots  (e.g. nv shots cyberpunk)"),
     ]
     return [
-        Result(title=f"nv {cmd}", subtitle=desc, icon=ICON)
+        Result(
+            title=cmd,
+            subtitle=desc,
+            icon=ICON,
+            json_rpc_action=_change_query(f"nv {cmd} "),
+        )
         for cmd, desc in commands
         if not partial or cmd.startswith(partial)
     ]
@@ -441,7 +578,6 @@ def query(query_text: str) -> ResultResponse:
 
     dispatch = {
         "info":      lambda: handle_info(),
-        "driver":    lambda: handle_driver(),
         "changelog": lambda: handle_changelog(),
         "stats":     lambda: handle_stats(),
         "clips":     lambda: handle_clips(arg),

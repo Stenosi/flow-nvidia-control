@@ -10,8 +10,7 @@ A [Flow Launcher](https://www.flowlauncher.com/) plugin to control your NVIDIA G
 
 | Command | Description |
 | --- | --- |
-| `nv info` | GPU name, installed driver version, total VRAM |
-| `nv driver` | Compare installed driver with the latest from NVIDIA |
+| `nv info` | GPU name, driver version + update status, total VRAM |
 | `nv changelog` | Open the latest NVIDIA driver release notes in the browser |
 | `nv stats` | Live GPU utilization %, VRAM usage, core temperature |
 | `nv clips [game]` | List recent NVIDIA recordings, filterable by game name |
@@ -41,8 +40,7 @@ Type `nv` in Flow Launcher followed by a subcommand:
 
 ```text
 nv              → show all available subcommands
-nv info         → GPU name, driver version, VRAM
-nv driver       → check for driver updates
+nv info         → GPU name, driver version + update status, VRAM
 nv changelog    → open latest driver release notes
 nv stats        → live GPU %, VRAM, temperature
 nv clips        → list all recent NVIDIA recordings

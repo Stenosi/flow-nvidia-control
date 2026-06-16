@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 lib/
 *.zip
+*.log
 .idea/
 .vscode/
 *.egg-info/
