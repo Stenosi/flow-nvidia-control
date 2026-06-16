@@ -31,7 +31,7 @@ Open Flow Launcher → Settings → Plugin Store → search **NvidiaControl** �
 ### Manual
 
 1. Download `Flow.Launcher.Plugin.NvidiaControl.zip` from the [latest release](https://github.com/Stenosi/flow-nvidia-control/releases/latest).
-2. Extract into `%APPDATA%\FlowLauncher\Plugins\NvidiaControl-73bb4ffd-4f56-461b-99ca-d9ddee0a61dc\`.
+2. Extract into `%LocalAppData%\FlowLauncher\app-2.1.3\Plugins`.
 3. Restart Flow Launcher.
 
 ## Usage
@@ -39,14 +39,14 @@ Open Flow Launcher → Settings → Plugin Store → search **NvidiaControl** �
 Type `nv` in Flow Launcher followed by a subcommand:
 
 ```text
-nv              → show all available subcommands
-nv info         → GPU name, driver version + update status, VRAM
-nv changelog    → open latest driver release notes
-nv stats        → live GPU %, VRAM, temperature
-nv clips        → list all recent NVIDIA recordings
-nv clips fortnite → list clips from Fortnite sessions (fuzzy match)
-nv shots        → list all recent screenshots
-nv shots cyberpunk → list Cyberpunk 2077 screenshots (fuzzy match)
+nv                    → show all available subcommands
+nv info               → GPU name, driver version + update status, VRAM
+nv changelog          → open latest driver release notes
+nv stats              → live GPU %, VRAM, temperature (refresh with ctrl + R)
+nv clips              → list all recent NVIDIA recordings
+nv clips [GAME]       → list clips from [GAME] sessions (fuzzy match)
+nv shots              → list all recent screenshots
+nv shots [GAME]       → list [GAME] screenshots (fuzzy match)
 ```
 
 ## Configuration
@@ -55,10 +55,8 @@ Default paths used by the plugin:
 
 | Setting | Default path |
 | --- | --- |
-| Video clips | `~/Videos/NVIDIA App` |
-| Screenshots | `~/Pictures/NVIDIA App` |
-
-If NVIDIA App uses a custom save location, update `CLIPS_DIR` and `SHOTS_DIR` at the top of `main.py`.
+| Video clips | `~/Videos/NVIDIA` |
+| Screenshots | `~/Videos/NVIDIA` |
 
 ## Development
 
