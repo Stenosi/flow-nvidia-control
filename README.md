@@ -15,6 +15,7 @@ A [Flow Launcher](https://www.flowlauncher.com/) plugin to control your NVIDIA G
 | `nv stats` | Live GPU utilization %, VRAM usage, core temperature |
 | `nv clips [game]` | List recent NVIDIA recordings, filterable by game name |
 | `nv shots [game]` | List recent NVIDIA screenshots, filterable by game name |
+| `nv settings` | View and edit clips/screenshots directory paths |
 
 ## Requirements
 
@@ -42,21 +43,35 @@ Type `nv` in Flow Launcher followed by a subcommand:
 nv                    → show all available subcommands
 nv info               → GPU name, driver version + update status, VRAM
 nv changelog          → open latest driver release notes
-nv stats              → live GPU %, VRAM, temperature (refresh with ctrl + R)
+nv stats              → live GPU %, VRAM, temperature (refresh with Ctrl+R)
 nv clips              → list all recent NVIDIA recordings
 nv clips [game]       → list clips from [game] sessions (fuzzy match)
 nv shots              → list all recent screenshots
 nv shots [game]       → list [game] screenshots (fuzzy match)
+nv settings           → view current directory paths, open config file
 ```
 
 ## Configuration
 
-Default paths used by the plugin:
+Type `nv settings` to see the current paths and open `config.json` directly from Flow Launcher.
 
-| Setting | Default path |
+Default paths:
+
+| Setting | Default |
 | --- | --- |
-| Video clips | `~/Videos/NVIDIA` |
-| Screenshots | `~/Videos/NVIDIA` |
+| Video clips | `%USERPROFILE%\Videos\NVIDIA` |
+| Screenshots | `%USERPROFILE%\Videos\NVIDIA` |
+
+To use a custom location, edit `config.json` in the plugin folder:
+
+```json
+{
+  "clips_dir": "D:\\Recordings\\NVIDIA",
+  "shots_dir": "D:\\Screenshots\\NVIDIA"
+}
+```
+
+Changes take effect immediately — no restart required.
 
 ## Development
 
