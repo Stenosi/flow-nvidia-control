@@ -63,20 +63,20 @@ CACHE_TTL = 300  # 5 minutes
 try:
     import pynvml as _pynvml
     _NVML_AVAILABLE = True
-except ImportError:
+except Exception:
     _NVML_AVAILABLE = False
 
 try:
     import wmi as _wmi
     _WMI_AVAILABLE = True
-except ImportError:
+except Exception:
     _WMI_AVAILABLE = False
 
 try:
     from thefuzz import fuzz as _fuzz
     from thefuzz import process as _fuzz_process
     _FUZZ_AVAILABLE = True
-except ImportError:
+except Exception:
     _FUZZ_AVAILABLE = False
 
 
