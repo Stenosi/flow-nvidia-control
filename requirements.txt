@@ -1,6 +1,5 @@
 pyflowlauncher>=0.8.0
 nvidia-ml-py>=12.0.0
-wmi>=1.5.1
 requests>=2.31.0
 thefuzz>=0.22.1
 python-levenshtein>=0.23.0

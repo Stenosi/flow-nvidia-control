@@ -51,9 +51,28 @@ GPU_DATA_URL = "https://raw.githubusercontent.com/ZenitH-AT/nvidia-data/main/gpu
 PROCESS_FIND_URL = "https://www.nvidia.com/Download/processFind.aspx"
 NVIDIA_DRIVERS_URL = "https://www.nvidia.com/en-us/drivers/results/"
 NVIDIA_RESULTS_URL = "https://www.nvidia.com/download/driverResults.aspx/{id}/en-us"
-OS_ID = 57   # Windows 10/11 64-bit
-DCH_ID = 1   # DCH (modern) driver packaging
+
+_NVIDIA_APP_EXE = r"C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA App.exe"
+_GFE_EXE = r"C:\Program Files\NVIDIA Corporation\NVIDIA GeForce Experience\NVIDIAGFE.exe"
+NVIDIA_APP_DRIVERS_URI = "nvidiaapp://drivers"
+OS_ID = 57    # Windows 10/11 64-bit
+DCH_ID = 1    # DCH (modern) driver packaging
+WHQL_GRD = 1  # Game Ready Driver
+WHQL_NSD = 0  # Studio Driver
 HTTP_TIMEOUT = 5  # seconds
+
+def _driver_update_action(download_url: str) -> tuple:
+    """Return (action, label) for the best available update path.
+
+    Priority: NVIDIA App deep link → GFE → specific download page → generic page.
+    """
+    if Path(_NVIDIA_APP_EXE).exists():
+        return open_url(NVIDIA_APP_DRIVERS_URI), "Open NVIDIA App"
+    if Path(_GFE_EXE).exists():
+        return shell_run(_GFE_EXE), "Open GeForce Experience"
+    url = download_url or NVIDIA_DRIVERS_URL
+    return open_url(url), "Open download page"
+
 
 # Driver check cache — avoids HTTP calls on every keystroke
 _driver_cache: dict = {"data": None, "timestamp": 0.0}
@@ -66,11 +85,6 @@ try:
 except Exception:
     _NVML_AVAILABLE = False
 
-try:
-    import wmi as _wmi
-    _WMI_AVAILABLE = True
-except Exception:
-    _WMI_AVAILABLE = False
 
 try:
     from thefuzz import fuzz as _fuzz
@@ -81,36 +95,58 @@ except Exception:
 
 
 # ---------------------------------------------------------------------------
-# WMI helpers
+# CIM helpers (PowerShell — no third-party dependency)
 # ---------------------------------------------------------------------------
 
 def get_gpu_info_wmi() -> dict:
-    """Return GPU name, driver version and VRAM via WMI."""
-    if not _WMI_AVAILABLE:
-        raise RuntimeError("'wmi' library not installed. Run: pip install wmi")
+    """Return GPU name, driver version and VRAM via PowerShell Get-CimInstance."""
+    import subprocess, json as _json
 
-    c = _wmi.WMI()
-    gpus = c.Win32_VideoController()
-    nvidia_gpu = next(
-        (
-            g for g in gpus
-            if "NVIDIA" in (g.AdapterCompatibility or "")
-            or "NVIDIA" in (g.Name or "")
-        ),
-        None,
+    ps_cmd = r"""
+$gpu = Get-CimInstance -ClassName Win32_VideoController | Where-Object { $_.Name -like '*NVIDIA*' } | Select-Object -First 1
+if (-not $gpu) { exit 1 }
+$driverType = ''
+try {
+    $driversKey = Get-ItemProperty 'HKLM:\SOFTWARE\NVIDIA Corporation\Installer2\Drivers' -ErrorAction Stop
+    $entry = $driversKey.PSObject.Properties |
+        Where-Object { $_.Value -like 'Display.Driver/*' } |
+        Sort-Object { [version]($_.Value.Split('/')[1]) } -Descending |
+        Select-Object -First 1
+    if ($entry) {
+        $infPath = ($entry.Value -split "`n")[1].Trim()
+        $content = Get-Content $infPath -Raw -ErrorAction Stop
+        if ($content -match '(?m)^\s*GRD\s*=\s*1') { $driverType = 'GRD' }
+        elseif ($content -match '(?m)^\s*NSD\s*=\s*1') { $driverType = 'NSD' }
+    }
+} catch {}
+[PSCustomObject]@{
+    Name = $gpu.Name
+    DriverVersion = $gpu.DriverVersion
+    AdapterRAM = $gpu.AdapterRAM
+    DriverType = $driverType
+} | ConvertTo-Json -Compress
+"""
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+        capture_output=True, text=True, timeout=10,
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
-    if not nvidia_gpu:
+    output = result.stdout.strip()
+    if not output:
         raise RuntimeError("No NVIDIA GPU detected by the system")
 
-    raw_ver = nvidia_gpu.DriverVersion or ""
+    data = _json.loads(output)
+
+    raw_ver = data.get("DriverVersion") or ""
     driver_ver = _parse_wmi_driver_version(raw_ver)
-    vram_bytes = nvidia_gpu.AdapterRAM or 0
+    vram_bytes = data.get("AdapterRAM") or 0
     vram_mb = vram_bytes // (1024 * 1024)
 
     return {
-        "name": nvidia_gpu.Name or "NVIDIA GPU",
+        "name": data.get("Name") or "NVIDIA GPU",
         "driver_version": driver_ver,
         "vram_mb": vram_mb,
+        "driver_type": data.get("DriverType") or "",
     }
 
 
@@ -191,18 +227,26 @@ def _match_pfid(search_name: str, gpu_data: dict) -> Optional[str]:
     return None
 
 
-def check_latest_driver(pfid: str, installed_version: str) -> dict:
+def check_latest_driver(pfid: str, installed_version: str, driver_type: str = "GRD") -> dict:
     """Query processFind.aspx for the latest driver version for this GPU."""
+    whql = WHQL_NSD if driver_type == "NSD" else WHQL_GRD
     r = requests.get(
         PROCESS_FIND_URL,
-        params={"pfid": pfid, "osid": OS_ID, "dtcid": DCH_ID},
+        params={"pfid": pfid, "osid": OS_ID, "dtcid": DCH_ID, "whql": whql},
         timeout=HTTP_TIMEOUT,
     )
     r.raise_for_status()
     html = r.text
 
-    version_match = re.search(r'<td class="gridItem">(\d{3}\.\d{2})</td>', html)
+    # Try the specific gridItem cell first, then fall back to any version in the page
+    version_match = (
+        re.search(r'<td[^>]*class="gridItem"[^>]*>\s*(\d{3}\.\d{2})\s*</td>', html)
+        or re.search(r'<td[^>]*>\s*(\d{3}\.\d{2})\s*</td>', html)
+    )
     if not version_match:
+        # If NSD returned nothing, fall back to GRD
+        if driver_type == "NSD":
+            return check_latest_driver(pfid, installed_version, driver_type="GRD")
         raise RuntimeError("No driver found in NVIDIA download database")
     latest_ver = version_match.group(1)
 
@@ -217,20 +261,22 @@ def check_latest_driver(pfid: str, installed_version: str) -> dict:
         "is_up_to_date": latest_ver == installed_version,
         "download_url": download_url,
         "release_notes_url": download_url,
+        "driver_type": driver_type,
     }
 
 
-def _get_cached_driver_check(gpu_name: str, installed_version: str) -> dict:
+def _get_cached_driver_check(gpu_name: str, installed_version: str, driver_type: str = "GRD") -> dict:
     """Return driver check result, re-fetching only when the 5-minute cache expires."""
     now = time.time()
-    if _driver_cache["data"] and (now - _driver_cache["timestamp"]) < CACHE_TTL:
-        return _driver_cache["data"]
+    cached = _driver_cache["data"]
+    if cached and (now - _driver_cache["timestamp"]) < CACHE_TTL and cached.get("driver_type") == driver_type:
+        return cached
 
     pfid = fetch_gpu_pfid(gpu_name)
     if not pfid:
         raise RuntimeError("GPU not found in NVIDIA database")
 
-    result = check_latest_driver(pfid, installed_version)
+    result = check_latest_driver(pfid, installed_version, driver_type)
     _driver_cache["data"] = result
     _driver_cache["timestamp"] = now
     return result
@@ -333,16 +379,22 @@ def handle_info() -> list[Result]:
     ]
 
     # Driver version + update check — errors are shown in the subtitle
+    driver_type = gpu.get("driver_type", "")
+    driver_type_label = {"GRD": "Game Ready", "NSD": "Studio"}.get(driver_type, "")
+    driver_title = f"Driver {gpu['driver_version']}"
+    if driver_type_label:
+        driver_title += f"  ·  {driver_type_label}"
+
     driver_subtitle = "Installed driver"
     driver_action = None
     try:
-        info = _get_cached_driver_check(gpu["name"], gpu["driver_version"])
+        info = _get_cached_driver_check(gpu["name"], gpu["driver_version"], driver_type or "GRD")
         if info["is_up_to_date"]:
-            driver_subtitle = "Up to date"
+            driver_subtitle = f"Up to date  (latest: {info['latest_version']})"
         else:
-            dl_url = info["download_url"] or NVIDIA_DRIVERS_URL
-            driver_subtitle = f"Update available: {info['latest_version']} — click to download"
-            driver_action = open_url(dl_url)
+            action, action_label = _driver_update_action(info.get("download_url", ""))
+            driver_subtitle = f"Update available → {info['latest_version']}  — {action_label}"
+            driver_action = action
     except requests.Timeout:
         driver_subtitle = "Driver check timed out — click to open NVIDIA website"
         driver_action = open_url(NVIDIA_DRIVERS_URL)
@@ -356,7 +408,7 @@ def handle_info() -> list[Result]:
         driver_action = open_url(NVIDIA_DRIVERS_URL)
 
     results.append(Result(
-        title=f"Driver {gpu['driver_version']}",
+        title=driver_title,
         subtitle=driver_subtitle,
         icon=ICON,
         score=200_000,
